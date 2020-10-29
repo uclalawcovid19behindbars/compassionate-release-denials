@@ -28,4 +28,4 @@ jobs:
       
       # Run a python script
       - name: Run a python script
-        run: test.py
+        run: python test.py
