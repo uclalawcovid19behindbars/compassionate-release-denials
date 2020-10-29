@@ -33,4 +33,8 @@ jobs:
       
       # Run a python script
       - name: Run a python script
+        id: 'run_pythonn'
         run: python test.py
+
+      - name: Test output
+        run: echo ${{steps.run_python.outputs.results}}
