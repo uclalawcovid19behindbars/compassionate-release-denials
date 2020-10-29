@@ -33,7 +33,7 @@ jobs:
       
       # Run a python script
       - name: Run a python script
-        id: 'run_pythonn'
+        id: 'run_python'
         run: python test.py
 
       - name: Test output
