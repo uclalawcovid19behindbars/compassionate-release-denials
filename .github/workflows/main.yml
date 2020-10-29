@@ -37,4 +37,6 @@ jobs:
         run: python test.py
 
       - name: Grab object from python step
-        run: echo "${{ steps.run_python.outputs.results }}"
+        env:
+          RESULTS: ${{ steps.run_python.outputs.results }}  
+        run: echo "$RESULTS"
