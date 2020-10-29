@@ -38,5 +38,5 @@ jobs:
 
       - name: Grab object from python step
         env:
-          RESULTS: ${{ steps.run_python.outputs }}  
+          RESULTS: ${{ steps.run_python.outputs.df }}  
         run: echo "$RESULTS"
