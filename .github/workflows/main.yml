@@ -33,10 +33,10 @@ jobs:
       
       # Run a python script
       - name: Run a python script
+        run: |
+          output=$(python test.py)
+          echo "::set-output name=lildat::$output"
         id: 'run_python'
-        run: python test.py
 
-      - name: Grab object from python step
-        env:
-          RESULTS: ${{ steps.run_python.outputs.df }}  
-        run: echo "$RESULTS"
+      - name: Print python step output
+        run: echo ${{ steps.run_python.outputs.lildat }}
