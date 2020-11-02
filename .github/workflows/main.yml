@@ -41,7 +41,7 @@ jobs:
 #       - name: Print python step output
 #         run: echo ${{ steps.run_python.outputs.lildat }}
 
-      - name: Update Google sheet
+      - name: gsheet.action
         uses: jroehl/gsheet.action@v1.1.0
         with:
            spreadsheetId: ${{ secrets.SHEET_ID }}
