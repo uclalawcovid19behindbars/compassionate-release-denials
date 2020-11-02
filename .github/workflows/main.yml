@@ -42,7 +42,7 @@ jobs:
 #         run: echo ${{ steps.run_python.outputs.lildat }}
 
       - name: Update Google sheet
-        uses: jroehl/gsheet.action@v1.0.0
+        uses: jroehl/gsheet.action@v1.1.0
         with:
            spreadsheetId: ${{ secrets.SHEET_ID }}
            commands: |
