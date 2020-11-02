@@ -44,7 +44,7 @@ jobs:
       - name: Update Google sheet
         uses: jroehl/gsheet.action@v1.0.0
         with:
-           spreadsheetId: 13Ix4GmlzjVdfU1sKayppA_kCWpzHyUp4N3cDcSg4iXw 
+           spreadsheetId: ${{ secrets.SHEET_ID }}
            commands: |
              [
               { "command": "addWorksheet", "args": { "worksheetTitle": "newSheet" }},
