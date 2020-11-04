@@ -2,13 +2,13 @@ import pandas as pd
 import json
 import numpy as np
 
-# with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/doc_details.json') as f:
+# with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/doc_details.json') as f:
 #     test = json.load(f)
 
-with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/denied_archive.json') as f:
+with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/denied_archive.json') as f:
     denied_archive = json.load(f)
 
-with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/granted_archive.json') as f:
+with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/granted_archive.json') as f:
     granted_archive = json.load(f)
 
 def filter_data(json_dat):
@@ -48,4 +48,4 @@ archive = denied.append(granted)
 dups = archive.duplicated(subset = ['Citation'])
 archive['Duplicate citation?'] = np.where(dups, 'Yes', '')
 
-archive.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/archive_crs.csv')
+archive.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/archive_crs.csv')
