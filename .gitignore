@@ -1,5 +1,10 @@
 # keys
 api_key.yml
+.vscode/
+.DS_Store
+data/
+test.py
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
