@@ -18,7 +18,7 @@ def filter_data(json_dat):
     df = pd.DataFrame(rows)
     df['dateFiled_clean'] = df['dateFiled'].str[5:7] + '/' + df['dateFiled'].str[8:10] + '/' + df['dateFiled'].str[2:4]
     df['citation'] = df['caseName'] + ', No. ' + df['docketNumber'].astype(str) + ', Dkt. No. ' + df['entry_number'].astype(str) + ' ([' + df['dateFiled_clean'] + '])'
-    df['url'] = 'https://www.courtlistener.com/' + df['absolute_url']
+    df['url'] = 'https://www.courtlistener.com' + df['absolute_url']
     df['reviewed']  = 'No'
     columns = ['caseName', 'docketNumber', 'court', 'dateFiled_clean', 'entry_number', 'description', 'status',
                 'assignedTo', 'referredTo', 'suitNature', 'cause', 'attorney', 'citation', 'url', 'reviewed']
