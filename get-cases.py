@@ -12,14 +12,13 @@ sheet_title_date = current_date.strftime("%m/%d/%y")
 with open("./api_key.json") as f:
     api_file = json.load(f)
 
-root = "https://www.courtlistener.com/api/rest/v3/"
-key = api_file['key']
+root = "https://www.courtlistener.com/api/rest/v3"
 headers = {'Authorization': api_file['auth_token'] }
 
 main_query = '(coronavirus OR covid-19 OR covid) AND ("compassionate release" OR 3582! OR "first step act" OR "reduce sentence" OR "home confinement")'
 
 def create_description(outcome):
-    description = '(release OR ("compassionate release" OR 3582! OR "first step act" OR "reduce sentence" OR "home confinement" OR "supervised release")) AND (order OR decision OR opinion OR ruling OR "signed by" OR judgment)'
+    base_description = '(release OR ("compassionate release" OR 3582! OR "first step act" OR "reduce sentence" OR "home confinement" OR "supervised release")) AND (order OR decision OR opinion OR ruling OR "signed by" OR judgment)'
     denial_desc = ' AND (deny! OR denial or dismiss!)'
     granted_desc = ' AND (grant! OR sustain!)'
     possible_outcomes = {
@@ -28,7 +27,7 @@ def create_description(outcome):
         "denied": denial_desc
     }
     description = possible_outcomes.get(outcome, lambda x: x)
-    return description + description
+    return base_description + description
 
 # date format: '10/26/2020' 
 def create_endpoint(granted_or_denied, date_filed = None):
@@ -41,24 +40,21 @@ def create_endpoint(granted_or_denied, date_filed = None):
             '&maxResults=50'
             '&description={2}'
             '&filed_after={3}'
-            '&docket_number=cr'
-            '&key={4}'.format(root, main_query, description, date_filed, key))
+            '&docket_number=cr'.format(root, main_query, description, date_filed))
     else:
         search_http_endpoint = ('{0}/search'
-                '?q={1}'
-                '&type=r'
-                '&order_by=score%20desc'
-                '&description={2}'
-                '&docket_number=cr'
-                '''&fields=page,docket_number,court,assigned_to,referred_to,nature_of_suit,resource_uri,
-                            case_name,cause,pageToken'''
-                '&key={3}'.format(root, main_query, description, key))
+            '?q={1}'
+            '&type=r'
+            '&order_by=score%20desc'
+            '&maxResults=50'
+            '&description={2}'
+            '&docket_number=cr'.format(root, main_query, description))
     return search_http_endpoint
 
 def get_CRs(granted_or_denied, date_filed = None, nextPage = None):
     search_http_endpoint = create_endpoint(granted_or_denied, date_filed)
     if nextPage:
-        r = requests.get(nextPage)
+        r = requests.get(nextPage, headers=headers)
         r.raise_for_status()
     else: 
         r = requests.get(search_http_endpoint, headers=headers)
@@ -72,7 +68,7 @@ def get_CRs(granted_or_denied, date_filed = None, nextPage = None):
     nextPage = json_data.get('next') 
     return res, npages, nextPage
 
-def get_all_pages(granted_or_denied, date_filed):
+def get_all_pages(granted_or_denied, date_filed = None):
     all_items = []
     first_items, npages, nextPage = get_CRs(granted_or_denied, date_filed)
     all_items.extend(first_items)
@@ -84,9 +80,9 @@ def get_all_pages(granted_or_denied, date_filed):
             nextPage = nextPages
     return all_items
 
-granted_docs = get_all_pages('granted', '02/01/20')
-denied_docs = get_all_pages('denied', '02/01/20')
-main_docs = get_all_pages('main', '02/01/20')
+granted_docs = get_all_pages('granted')
+denied_docs = get_all_pages('denied')
+main_docs = get_all_pages('main')
 
 # save raw .json file 
 with open('data/granted_archive.json', 'w') as outfile:
