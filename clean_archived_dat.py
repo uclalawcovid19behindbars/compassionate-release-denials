@@ -5,18 +5,21 @@ import numpy as np
 # with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/doc_details.json') as f:
 #     test = json.load(f)
 
+with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/granted_archive.json') as f:
+    granted_archive = json.load(f)
+
 with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/denied_archive.json') as f:
     denied_archive = json.load(f)
 
-with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/granted_archive.json') as f:
-    granted_archive = json.load(f)
+with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/main_archive.json') as f:
+    main_archive = json.load(f)
 
 def filter_data(json_dat):
     rows = []
     for item in json_dat:
         rows.append(item)
     df = pd.DataFrame(rows)
-    df['dateFiled_clean'] = df['dateFiled'].str[5:7] + '/' + df['dateFiled'].str[8:10] + '/' + df['dateFiled'].str[2:4]
+    df['dateFiled_clean'] = df['entry_date_filed'].str[5:7] + '/' + df['entry_date_filed'].str[8:10] + '/' + df['entry_date_filed'].str[2:4]
     df['citation'] = df['caseName'] + ', No. ' + df['docketNumber'].astype(str) + ', Dkt. No. ' + df['entry_number'].astype(str) + ' ([' + df['dateFiled_clean'] + '])'
     df['url'] = 'https://www.courtlistener.com' + df['absolute_url']
     df['reviewed']  = 'No'
@@ -40,12 +43,35 @@ def filter_data(json_dat):
                                'reviewed': 'Reviewed?'})
     return out
 
-# expected 485 total
 granted = filter_data(granted_archive) # expect 106
+granted['Case Name'].nunique()
+granted.shape
+granted['Docket Number'].nunique()
+
 denied = filter_data(denied_archive) # expect 114
+denied['Case Name'].nunique()
+denied.shape
+denied['Docket Number'].nunique()
+
+main = filter_data(main_archive) 
+main['Case Name'].nunique()
+main.shape
+main['Docket Number'].nunique()
 
 archive = denied.append(granted)
+archive = archive.append(main)
 dups = archive.duplicated(subset = ['Citation'])
 archive['Duplicate citation?'] = np.where(dups, 'Yes', '')
+
+# find dockets with missing attorney / judge information
+# Judge (initial) 
+# Prosecutor Name
+missing_pros = archive[~archive['Prosecutor Name'].isnull()]
+missing_judge = archive[~archive['Judge (initial)'].isnull()]
+missing = missing_pros.append(missing_judge)
+missing_out = missing.drop_duplicates(subset=['Citation'])
+missing_out.shape
+missing_out['Docket Number'].nunique()
+
 
 archive.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/archive_crs.csv')

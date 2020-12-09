@@ -13,7 +13,7 @@ with open("./api_key.json") as f:
     api_file = json.load(f)
 
 root = "https://www.courtlistener.com/api/rest/v3"
-headers = {'Authorization': api_file['auth_token'] }
+my_headers = {'Authorization': api_file['auth_token'] }
 
 main_query = '(coronavirus OR covid-19 OR covid) AND ("compassionate release" OR 3582! OR "first step act" OR "reduce sentence" OR "home confinement")'
 
@@ -39,7 +39,7 @@ def create_endpoint(granted_or_denied, date_filed = None):
             '&order_by=score%20desc'
             '&maxResults=50'
             '&description={2}'
-            '&filed_after={3}'
+            '&filed_after={3}' # need to change this to reference "entry_date_filed"
             '&docket_number=cr'.format(root, main_query, description, date_filed))
     else:
         search_http_endpoint = ('{0}/search'
@@ -54,10 +54,12 @@ def create_endpoint(granted_or_denied, date_filed = None):
 def get_CRs(granted_or_denied, date_filed = None, nextPage = None):
     search_http_endpoint = create_endpoint(granted_or_denied, date_filed)
     if nextPage:
-        r = requests.get(nextPage, headers=headers)
+        r = requests.get(nextPage, headers=my_headers)
+        print(r)
         r.raise_for_status()
     else: 
-        r = requests.get(search_http_endpoint, headers=headers)
+        r = requests.get(search_http_endpoint, headers=my_headers)
+        print(r)
         r.raise_for_status()
     json_data = r.json()
     docket_entries = [doc['absolute_url'] for doc in json_data['results']]
@@ -93,3 +95,4 @@ with open('data/denied_archive.json', 'w') as outfile:
 
 with open('data/main_archive.json', 'w') as outfile:
     json.dump(main_docs, outfile, sort_keys = True)
+
