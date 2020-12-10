@@ -20,14 +20,15 @@ def filter_data(json_dat):
         rows.append(item)
     df = pd.DataFrame(rows)
     df['dateFiled_clean'] = df['entry_date_filed'].str[5:7] + '/' + df['entry_date_filed'].str[8:10] + '/' + df['entry_date_filed'].str[2:4]
-    df['citation'] = df['caseName'] + ', No. ' + df['docketNumber'].astype(str) + ', Dkt. No. ' + df['entry_number'].astype(str) + ' ([' + df['dateFiled_clean'] + '])'
+    df['citation'] = df['caseName'] + ', No. ' + df['docket_id'].astype(str) + ', Dkt. No. ' + df['entry_number'].astype(str) + ' ([' + df['dateFiled_clean'] + '])'
     df['url'] = 'https://www.courtlistener.com' + df['absolute_url']
     df['reviewed']  = 'No'
-    columns = ['caseName', 'docketNumber', 'court', 'dateFiled_clean', 'entry_number', 'description', 'status',
+    columns = ['caseName', 'docketNumber', 'court', 'dateFiled_clean', 'entry_number', 'description', 'status', 'docket_id',
                 'assignedTo', 'referredTo', 'suitNature', 'cause', 'attorney', 'citation', 'url', 'reviewed']
     out = df[columns]
     out = out.rename(columns = {'caseName': 'Case Name',
                                'docketNumber': 'Docket Number',
+                               'docket_id': "Docket ID",
                                'court': 'Federal Court Name',
                                'dateFiled_clean': 'Date Filed',
                                'entry_number': 'Document Number',
@@ -43,20 +44,17 @@ def filter_data(json_dat):
                                'reviewed': 'Reviewed?'})
     return out
 
-granted = filter_data(granted_archive) # expect 106
-granted['Case Name'].nunique()
-granted.shape
-granted['Docket Number'].nunique()
+granted = filter_data(granted_archive) 
+len(granted)                  # nDocket Entries
+granted['Docket ID'].nunique() # nCases
 
-denied = filter_data(denied_archive) # expect 114
-denied['Case Name'].nunique()
-denied.shape
-denied['Docket Number'].nunique()
+denied = filter_data(denied_archive) 
+len(denied)
+denied['Docket ID'].nunique()
 
 main = filter_data(main_archive) 
-main['Case Name'].nunique()
-main.shape
-main['Docket Number'].nunique()
+len(main)
+main['Docket ID'].nunique() 
 
 archive = denied.append(granted)
 archive = archive.append(main)
@@ -70,8 +68,7 @@ missing_pros = archive[~archive['Prosecutor Name'].isnull()]
 missing_judge = archive[~archive['Judge (initial)'].isnull()]
 missing = missing_pros.append(missing_judge)
 missing_out = missing.drop_duplicates(subset=['Citation'])
-missing_out.shape
-missing_out['Docket Number'].nunique()
-
+len(missing_out)
+missing_out['Docket ID'].nunique()
 
 archive.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/archive_crs.csv')
