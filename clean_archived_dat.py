@@ -20,10 +20,10 @@ def filter_data(json_dat):
         rows.append(item)
     df = pd.DataFrame(rows)
     df['dateFiled_clean'] = df['entry_date_filed'].str[5:7] + '/' + df['entry_date_filed'].str[8:10] + '/' + df['entry_date_filed'].str[2:4]
-    df['citation'] = df['caseName'] + ', No. ' + df['docket_id'].astype(str) + ', Dkt. No. ' + df['entry_number'].astype(str) + ' ([' + df['dateFiled_clean'] + '])'
+    df['citation'] = df['caseName'] + ', No. ' + df['docketNumber'].astype(str) + ', Dkt. No. ' + df['entry_number'].astype(str) + ' ([' + df['dateFiled_clean'] + '])'
     df['url'] = 'https://www.courtlistener.com' + df['absolute_url']
     df['reviewed']  = 'No'
-    columns = ['caseName', 'docketNumber', 'court', 'dateFiled_clean', 'entry_number', 'description', 'status', 'docket_id',
+    columns = ['caseName', 'docketNumber', 'docket_id', 'court', 'dateFiled_clean', 'entry_number', 'description', 'status', 
                 'assignedTo', 'referredTo', 'suitNature', 'cause', 'attorney', 'citation', 'url', 'reviewed']
     out = df[columns]
     out = out.rename(columns = {'caseName': 'Case Name',
