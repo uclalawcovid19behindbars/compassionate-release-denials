@@ -10,10 +10,10 @@ sheet_title_date = current_date.strftime("%m/%d/%y")
 
 # CONFIG API REQUESTER
 with open("./api_key.json") as f:
-    api_file = json.load(f)
+    secrets_file = json.load(f)
 
 root = "https://www.courtlistener.com/api/rest/v3"
-my_headers = {'Authorization': api_file['auth_token'] }
+my_headers = {'Authorization': secrets_file['auth_token'] }
 
 main_query = '(coronavirus OR covid-19 OR covid) AND ("compassionate release" OR 3582! OR "first step act" OR "reduce sentence" OR "home confinement")'
 
@@ -30,7 +30,7 @@ def create_description(outcome):
     return base_description + description
 
 # date format: '10/26/2020' 
-def create_endpoint(granted_or_denied, date_filed = None):
+def create_search_endpoint(granted_or_denied, date_filed = None):
     description = create_description(granted_or_denied)
     if date_filed:
         search_http_endpoint = ('{0}/search'
@@ -52,7 +52,7 @@ def create_endpoint(granted_or_denied, date_filed = None):
     return search_http_endpoint
 
 def get_CRs(granted_or_denied, date_filed = None, nextPage = None):
-    search_http_endpoint = create_endpoint(granted_or_denied, date_filed)
+    search_http_endpoint = create_search_endpoint(granted_or_denied, date_filed)
     if nextPage:
         r = requests.get(nextPage, headers=my_headers)
         print(r)
