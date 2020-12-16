@@ -70,7 +70,10 @@ missing = missing_pros.append(missing_judge)
 missing_out = missing.drop_duplicates(subset=['Citation'])
 len(missing_out)
 missing_out['Docket ID'].nunique()
-missing_out['docket_num'] = missing_out['Docket ID'].slice(0, 12) # get chars 1:13 
+missing_out['docket_num'] = missing_out['Docket ID'].slice(0, 12) #TO DO :  get chars 1:13 
+missing_out['court_abbrev'] = missing_out #TO DO:  ??  -- something like 'court=okwd'
+
+
 missing_out.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/missings_crs.csv')
 
 

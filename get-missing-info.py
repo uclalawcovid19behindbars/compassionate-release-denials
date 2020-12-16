@@ -9,7 +9,6 @@ root = "https://www.courtlistener.com/api/rest/v3"
 pacer_username = secrets_file['pacer_username']
 pacer_pw = secrets_file['pacer_pw']
 my_headers = {'Authorization': secrets_file['auth_token'] }
-court = ## WHAT COURT? 
 missing_dat = pd.read_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/missings_crs.csv')
 
 def create_recap_fetch_endpoint(docket_number, court):
@@ -32,14 +31,14 @@ def get_missing_info(docket_number, court):
 
 all_missed_items = []
 for i in missing_dat:
-    out_data = get_missing_info(missing_dat['docket_num'][i], court)
+    out_data = get_missing_info(missing_dat['docket_num'][i], missing_dat['court_abbrev'][i])
     all_missing_items += out_data
     return(all_missing_items)
 
 with open('data/missing_info.json', 'w') as outfile:
     json.dump(all_missing_items, outfile, sort_keys = True)
 
-## EXAMPLE RECAP-FETCH CALLS:
+## EXAMPLE RECAP-FETCH CALL
 # this request identifies a case by docket number and court:
 curl -X POST \
   --data 'request_type=1' \
