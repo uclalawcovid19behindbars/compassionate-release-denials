@@ -1,4 +1,5 @@
 import requests
+import pandas as pd
 import json
 import math
 
@@ -7,7 +8,7 @@ with open("./api_key.json") as f:
 
 root = "https://www.courtlistener.com/api/rest/v3"
 pacer_username = secrets_file['pacer_username']
-pacer_pw = secrets_file['pacer_pw']
+pacer_pw = secrets_file['pacer_password']
 my_headers = {'Authorization': secrets_file['auth_token'] }
 missing_dat = pd.read_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/missings_crs.csv')
 
