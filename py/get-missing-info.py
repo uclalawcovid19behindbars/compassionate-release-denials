@@ -1,7 +1,6 @@
 import requests
 import pandas as pd
 import json
-import math
 
 with open("./api_key.json") as f:
     secrets_file = json.load(f)
@@ -12,12 +11,14 @@ pacer_pw = secrets_file['pacer_password']
 my_headers = {'Authorization': secrets_file['auth_token'] }
 missing_dat = pd.read_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/missings_crs.csv')
 
+## to do: need to figure out a way to filter on date
+
 def create_recap_fetch_endpoint(docket_number, court):
     search_http_endpoint = ('{0}/recap-fetch'
-        '?request_type=1'     # request_type 1 is for dockets
+        '?request_type=1'     
         '&pacer_username={1}'
         '&pacer_password={2}'
-        '&docket_number={3}' # something like 5:16-cv-00432
+        '&docket_number={3}' 
         '&court={4}'
         'show_parties_and_counsel=true'.format(root, pacer_username, pacer_pw, docket_number, court))
     return search_http_endpoint
@@ -30,11 +31,25 @@ def get_missing_info(docket_number, court):
     json_data = r.json()
     return json_data
 
+## look into the number of dockets to fetch
+
+missing_dat['dNum,Court'] = missing_dat['docket_num'] + "_" + missing_dat['court_exact']
+print("nDocket entries", len(missing_dat))
+print("nCases", missing_dat['Docket ID'].nunique())
+print("nDockets", missing_dat['docket_num'].nunique())
+print("n {docket num, court}:", missing_dat['dNum,Court'].nunique())
+print("nCases", missing_dat['Docket ID'].nunique())
+
+
+
 all_missed_items = []
 for i in missing_dat:
-    out_data = get_missing_info(missing_dat['docket_num'][i], missing_dat['court_abbrev'][i])
+    out_data = get_missing_info(missing_dat['docket_num'][i], missing_dat['court_exact'][i])
     all_missing_items += out_data
     return(all_missing_items)
+
+
+
 
 with open('data/missing_info.json', 'w') as outfile:
     json.dump(all_missing_items, outfile, sort_keys = True)
