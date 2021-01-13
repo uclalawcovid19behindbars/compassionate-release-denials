@@ -76,8 +76,7 @@ def process_archive(denied_archive, granted_archive, main_archive, all_columns):
         missing_out = missing.drop_duplicates(subset=['Citation'])
         print("nDocket entries (missing)", len(missing_out))
         print("total nDocket entries", len(archive))
-        missing_out['docket_num'] = missing_out['Docket Number'].str.slice(0, 12) 
-        missing_out['court_id'] = missing_out['court_id']
+        missing_out['docket_num'] = missing_out['Docket Number'].str.slice(0, 13) 
         missing_out.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/missings_crs.csv')
         return(missing_out)
 
