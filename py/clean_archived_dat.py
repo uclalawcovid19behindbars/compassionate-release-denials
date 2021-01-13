@@ -66,20 +66,24 @@ def process_archive(denied_archive, granted_archive, main_archive, all_columns):
     dups = archive.duplicated(subset = ['Citation'])
     archive['Duplicate citation?'] = np.where(dups, 'Yes', '')
 
-    if all_columns:
-        archive.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/archive_crs.csv')
-        return(archive)
-    else: 
-        missing_pros = archive[~archive['Prosecutor Name'].isnull()]
-        missing_judge = archive[~archive['Judge (initial)'].isnull()]
-        missing = missing_pros.append(missing_judge)
-        missing_out = missing.drop_duplicates(subset=['Citation'])
-        print("nDocket entries (missing)", len(missing_out))
-        print("total nDocket entries", len(archive))
-        missing_out['docket_num'] = missing_out['Docket Number'].str.slice(0, 13) 
-        missing_out.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/missings_crs.csv')
-        return(missing_out)
+    # if not all_columns:
+    #     archive.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/archive_crs.csv')
+    #     return(archive)
+    # else: 
+        # missing_pros = archive[~archive['Prosecutor Name'].isnull()]
+        # missing_pros = archive.loc[archive['Prosecutor Name'] == 'None'] # this isn't right
+        # missing_judge = archive[~archive['Judge (initial)'].isnull()]
+        # missing = missing_pros.append(missing_judge)
+        # missing_out = missing.drop_duplicates(subset=['Citation'])
+
+    # print("nDocket entries (missing)", len(missing_out))
+    print("total nDocket entries", len(archive))
+    archive['docket_num'] = archive['Docket Number'].str.slice(0, 13) 
+    archive.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/archive_crs.csv')
+
+    # missing_out.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/missings_crs.csv')
+    return(archive)
 
 archive = process_archive(denied_archive, granted_archive, main_archive, all_columns = True)
-missings = process_archive(denied_archive, granted_archive, main_archive, all_columns = False)
+# missings = process_archive(denied_archive, granted_archive, main_archive, all_columns = True)
 

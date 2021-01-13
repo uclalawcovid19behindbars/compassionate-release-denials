@@ -95,4 +95,3 @@ with open('data/denied_archive.json', 'w') as outfile:
 
 with open('data/main_archive.json', 'w') as outfile:
     json.dump(main_docs, outfile, sort_keys = True)
-
