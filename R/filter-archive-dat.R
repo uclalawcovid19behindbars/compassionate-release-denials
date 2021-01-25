@@ -4,8 +4,9 @@ dat_path <- file.path('~', 'UCLA', 'code', 'compassionate-releases', 'compassion
 dat <- read_csv(dat_path)
 
 missing_dat <- dat %>% 
-    filter(is.na(`Judge (initial)`) | is.na(`Prosecutor Name`))
+    filter(is.na(`Judge (initial)`) | is.na(`Prosecutor Name`)) %>% 
+    distinct(`Docket ID`, .keep_all = TRUE)
 
-n_distinct(missing_dat$`Docket ID`) # find distinct number of cases with missing info 
+nrow(missing_dat) # only save unique dockets
 
 write_csv(missing_dat, '/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/missings_crs.csv')

@@ -1,6 +1,7 @@
 import requests
 import pandas as pd
 import json
+import time
 
 with open("./api_key.json") as f:
     secrets_file = json.load(f)
@@ -16,39 +17,24 @@ missing_dat = pd.read_csv('/Users/hope/UCLA/code/compassionate-releases/compassi
 ####### USE RECAP-FETCH TO MAKE A PURCHASE 
 #######
 
-def create_recap_fetch_post(docket_number, court):
+def create_recap_fetch_post(docket_ID):
     recap_data = {"request_type": 1,
-        "pacer_username": {0},
-        "pacer_password": {1},
-        "docket_number": {2},
-        "court": {3},
-        "show_parties_and_counsel": "true"}.format(pacer_username, pacer_pw, docket_number, court)
+        "pacer_username": pacer_username,
+        "pacer_password": pacer_pw,
+        "docket": docket_ID,
+        "show_parties_and_counsel": "true"}
     return recap_data
 
-    # recap_request = ('{0}/recap-fetch'
-    #     '?request_type=1'     
-    #     '&pacer_username={1}'
-    #     '&pacer_password={2}'
-    #     '&docket_number={3}' 
-    #     '&court={4}'
-    #     '&show_parties_and_counsel=true'.format(root, pacer_username, pacer_pw, docket_number, court))
-    # return recap_request
-
-def post_recap_fetch(docket_number, court):
-    fetch_http_post = create_recap_fetch_post(docket_number, court)
-    r = requests.post(fetch_http_post, headers=my_headers)
+def post_recap_fetch(docket_ID):
+    fetch_http_post_data = create_recap_fetch_post(docket_ID)
+    r = requests.post('https://www.courtlistener.com/api/rest/v3/recap-fetch/', headers=my_headers, data=fetch_http_post_data)
     r.raise_for_status()
-    print(r.text)
+    return(r.text)
 
-## Share-able CURL POSTS
-
+## Example cURL POST
 curl -X POST --data 'request_type=1' --data 'pacer_username=USERNAME' --data 'pacer_password=PASSWORD' --data 'docket_number=5:18-cr-00765' --data 'court=ohnd' --data 'show_parties_and_counsel=true' --header 'Authorization: Token MYTOKEN' https://www.courtlistener.com/api/rest/v3/recap-fetch/
 
-# post_recap_fetch('1:16-cr-00106', 'med')
-https://www.courtlistener.com/api/rest/v3/search/?type=d&q=5%3A18-cr-00765+ohnd&order_by=score+desc
-
 ## look into the number of dockets to fetch
-missing_dat['docket_num'] = missing_dat['Docket Number'].str.slice(0, 13) 
 missing_dat['dNum,Court'] = missing_dat['docket_num'] + "_" + missing_dat['court_exact']
 print("nDocket entries", len(missing_dat))
 print("nCases", missing_dat['Docket ID'].nunique())
@@ -57,15 +43,13 @@ print("n {docket num, court}:", missing_dat['dNum,Court'].nunique())
 print("nCases", missing_dat['Docket ID'].nunique())
 
 ## test on one or two
-post_recap_fetch('5:18-cr-00765', 'ohnd')
+# post_recap_fetch('5:18-cr-00765', 'ohnd')
 # post_recap_fetch('1:16-cr-00106', 'med')
 
-all_missed_items = []
-for index, row in missing_dat.iterrows():
-    print(row['docket_num'], row['court_exact'])
-    # out_data = post_recap_fetch(row['docket_num'], row['court_exact'])
-    # all_missing_items += out_data
-    # return(all_missing_items)
+## DANGER ZONE 
+# for i in missing_dat.index:
+#     post_recap_fetch(missing_dat['docket_num'][i], missing_dat['court_exact'][i])
+#     time.sleep(2)
 
 #######
 ####### STEP 2: 
@@ -93,5 +77,3 @@ def get_missing_info(docket_number, court):
 
 with open('data/missing_info.json', 'w') as outfile:
     json.dump(all_missing_items, outfile, sort_keys = True)
-
-
