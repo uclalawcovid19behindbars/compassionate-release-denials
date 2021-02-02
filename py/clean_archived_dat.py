@@ -1,19 +1,29 @@
 import pandas as pd
 import json
 import numpy as np
+import pathlib
+from datetime import datetime
 
-# with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/doc_details.json') as f:
-#     test = json.load(f)
+# GET DATE
+current_date = datetime.now().date()
+formatted_date = current_date.strftime("%m-%d-%Y")
 
-with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/granted_archive.json') as f:
+# set up paths + files names
+data_path = pathlib.Path.home() / 'UCLA' / 'code' / 'compassionate-releases' / 'compassionate-release-denials' / 'data'
+archive_file_name = 'archive_' + formatted_date + '.csv'
+outfile_loc = data_path / archive_file_name
+
+# open most recently fetched data
+with open(data_path / 'granted_archive.json', mode = 'r') as f:
     granted_archive = json.load(f)
 
-with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/denied_archive.json') as f:
+with open(data_path / 'denied_archive.json', mode = 'r') as f:
     denied_archive = json.load(f)
 
-with open('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/main_archive.json') as f:
+with open(data_path / 'main_archive.json', mode = 'r') as f:
     main_archive = json.load(f)
 
+# clean it up
 def filter_data(json_dat, all_columns):
     rows = []
     for item in json_dat:
@@ -47,7 +57,6 @@ def filter_data(json_dat, all_columns):
                                     'reviewed': 'Reviewed?'})
     return out
 
-
 def process_archive(denied_archive, granted_archive, main_archive, all_columns):
     granted = filter_data(granted_archive, all_columns) 
     print("nDocket entries (granted)", len(granted))
@@ -63,15 +72,16 @@ def process_archive(denied_archive, granted_archive, main_archive, all_columns):
 
     archive = denied.append(granted)
     archive = archive.append(main)
+    print("total nDocket entries", len(archive))
+
     dups = archive.duplicated(subset = ['Citation'])
     archive['Duplicate citation?'] = np.where(dups, 'Yes', '')
     if not all_columns:
-        archive.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/archive_crs.csv')
+        archive.to_csv(outfile_loc)
         return(archive)
     else: 
-        print("total nDocket entries", len(archive))
         archive['docket_num'] = archive['Docket Number'].str.slice(0, 13) 
-        archive.to_csv('/Users/hope/UCLA/code/compassionate-releases/compassionate-release-denials/data/archive_crs.csv')
+        archive.to_csv(outfile_loc)
         return(archive)
 
 archive = process_archive(denied_archive, granted_archive, main_archive, all_columns = False)
