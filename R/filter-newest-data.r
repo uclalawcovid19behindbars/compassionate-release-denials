@@ -1,5 +1,6 @@
 library(tidyverse)
 library(lubridate)
+library(stringr)
 library(glue)
 
 formatted_date <- format(today(), "%m-%d-%Y")
@@ -27,7 +28,20 @@ new_dat <- anti_join(current_dat, old_dat, by = "document_id") %>%
 nrow(current_dat) - nrow(old_dat)
 nrow(new_dat)
 
-write_csv(new_dat, file.path(dat_path, "archive_new.csv"))
+## filter out first word "motion"
+## flag if description contains the word "pre-trial"
+new_dat_out <- new_dat %>% 
+       mutate(isPreTrial = ifelse(str_detect(`Document Description`, "(?i)pre-trial|pre trial|pretrial"), TRUE, ""),
+              firstWordInDesc = tolower(word(`Document Description`, 1)),
+              isMotion = ifelse(firstWordInDesc == "motion", TRUE, FALSE)
+              ) %>% 
+       filter(!isMotion) %>% 
+       select(-firstWordInDesc,
+              -isMotion)
+
+write_csv(new_dat_out, file.path(dat_path, "archive_new.csv"), na="")
+
+write.csv(new_dat_out, file.path(dat_path, "archive_new.csv"), na="", row.names=FALSE)
 
 ## clean up for next time
 # rename current_dat "archive_crs.csv"
