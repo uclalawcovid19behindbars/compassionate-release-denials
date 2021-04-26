@@ -1,2 +1,2 @@
 # compassionate-release-denials
-Grabbing compassionate release denials from Court Listener and putting them in a spreadsheet.
+Grabbing compassionate release cases from PACER and putting them in a spreadsheet.
