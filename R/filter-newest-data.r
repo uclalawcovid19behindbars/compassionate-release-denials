@@ -39,8 +39,6 @@ new_dat_out <- new_dat %>%
        select(-firstWordInDesc,
               -isMotion)
 
-write_csv(new_dat_out, file.path(dat_path, "archive_new.csv"), na="")
-
 write.csv(new_dat_out, file.path(dat_path, "archive_new.csv"), na="", row.names=FALSE)
 
 ## clean up for next time
