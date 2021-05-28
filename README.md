@@ -14,9 +14,10 @@ The other limitation of our data is based on our search strategy. To identify co
 
 Because a district court’s policies (in marking documents as “opinions”, in maintaining RSS feeds, and in formulating document descriptions) may influence whether our search strategy is effective, we have attempted to determine whether there are any districts over- or under-represented in our data.  
 
-## Data Dictionary 
+**Other sources**: 
+Descriptive variables for the federal court jurisdictions, including chief judge, nominating president, term as chief judge, and district number, were sourced from [Homeland Infrastructure Foundation-Level Data](https://hifld-geoplatform.opendata.arcgis.com/datasets/geoplatform::us-district-court-jurisdictions/about). 
 
-The full set of variables that we report includes the following: 
+## Data Dictionary 
 
 | Variable               | Description                                                                                                                    |
 |------------------------|--------------------------------------------------------------------------------------------------------------------------------|
