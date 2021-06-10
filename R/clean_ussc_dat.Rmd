@@ -1,0 +1,52 @@
+---
+title: "Process USSC CR data report"
+author: "Hope Johnson"
+date: "6/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(magick)
+library(behindbarstools)
+library(here)
+```
+
+## Read data
+
+We're using data from the U.S. Sentencing Commission to look at federal compassionate release data (in addition to the data scraped via CourtListened). The data to be used is contained within PDF tables, here:  <https://www.ussc.gov/sites/default/files/pdf/research-and-publications/federal-sentencing-statistics/compassionate-release/20210609-Compassionate-Release.pdf>.
+
+Extract the first table from page 4:
+
+```{r}
+raw_src <- "https://www.ussc.gov/sites/default/files/pdf/research-and-publications/federal-sentencing-statistics/compassionate-release/20210609-Compassionate-Release.pdf"
+  
+tab_1_first_col <- raw_src %>%
+  magick::image_read_pdf(pages = 4) %>%
+  # width, height, width offset, height offset
+  magick::image_crop("2370x3700+900+600") %>% 
+  ExtractTable() 
+
+tab_1_second_col <- raw_src %>%
+  magick::image_read_pdf(pages = 4) %>%
+  # width, height, width offset, height offset
+  magick::image_crop("2370x3700+3300+600") %>% 
+  ExtractTable() 
+
+tab_1_cleaning <- bind_rows(tab_1_first_col,
+                   tab_1_second_col) 
+names(tab_1_cleaning) <- c("district",
+                  "total",
+                  "n_granted",
+                  "perc_granted",
+                  "n_denied",
+                  "perc_denied")
+tab_1 <- tab_1_cleaning %>%
+  # rm header rows in the data
+  filter(nchar(district) != 0,
+         district != "District",
+         district != "TOTAL")
+
+#write_csv(tab_1, file.path(here(), "compassionate-release-denials", "data", "ussc_cr.csv"))
+```
