@@ -1,0 +1,581 @@
+---
+title: "Compassionate Release Data Analysis"
+author: "Hope Johnson"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(here)
+library(readxl)
+library(skimr)
+library(kableExtra)
+library(behindbarstools)
+library(rmarkdown)
+library(glue)
+library(lubridate)
+
+knitr::opts_chunk$set(fig.height=13) 
+knitr::opts_chunk$set(message = FALSE)
+dat_path <- here("compassionate-release-denials", "data")
+plot_path <- here("compassionate-release-denials", "plots")
+```
+
+## Read clean data 
+
+Read in the most up-to-date data that Rebecca and volunteers have cleaned:
+
+```{r, warning=FALSE, message=FALSE}
+ucla_dat <- read_xlsx(file.path(dat_path, "2020-04-08-master.xlsx")) %>%
+  mutate(merging_ucla = glue('{docketno_std}_{court_std}')) %>%
+  select_if(~sum(!is.na(.)) > 0) %>% # rm all NA
+  mutate(date_filed_std = as.Date(date_filed_std),
+         court_std = ifelse(court_std == "E.D. Louisiana.", "E.D. Louisiana", court_std)) 
+
+nrow(ucla_dat)
+```
+
+Merge Tori Finkle's data set with the UCLA data set:
+
+```{r, warning=FALSE, message=FALSE}
+finkle_data <- read_xlsx(file.path(dat_path, "2020-02-16-cr_finkle.xlsx")) %>%
+  mutate(court_std = ifelse(court_std == "D. Hawai'i", "D. Hawaii", court_std), 
+         merging_finkle = glue('{docketno_std}_{court_std}')) %>%
+  select_if(~sum(!is.na(.)) > 0) %>% # rm all NA
+  mutate(Date_finkle = ifelse(!is.na(Date), glue('{substr(Date, 5, 7)} {substr(Date, 9, 10)} {substr(Date, 25, 28)}'), NA)) %>%
+  mutate(Date_finkle_parsed = mdy(Date_finkle))
+
+merged <- full_join(ucla_dat, finkle_data, by = c("merging_ucla" = "merging_finkle"))
+```
+
+```{r, warning=FALSE, message=FALSE}
+dat_merged <- merged %>% 
+  mutate(finkle_lower = tolower(Decision)) %>%
+  mutate(court_std = behindbarstools::coalesce_with_warnings(court_std.x, court_std.y)) %>% 
+  mutate(docketno_std = behindbarstools::coalesce_with_warnings(docketno_std.x, docketno_std.y)) %>% 
+  ## create bool for times that ucla and finkle classifications were both non-NA and different 
+  mutate(diff_status = ifelse(!is.na(finkle_lower) & !is.na(granted_denied) & (finkle_lower != granted_denied),
+                              TRUE, FALSE)) %>%
+  ## create bool for finkle more recent than ucla (when both non-NA and different)
+  mutate(status_mostrecent = ifelse(diff_status, Date_finkle_parsed > date_filed_std, NA)) %>%
+  mutate(status_alldiff = behindbarstools::coalesce_with_warnings(granted_denied, finkle_lower)) %>%
+  ## first, grab the first non-NA date
+  mutate(date_coalesced_first = coalesce(Date_finkle_parsed, date_filed_std),
+         date_both = ifelse((!is.na(Date_finkle_parsed) & !is.na(date_filed_std)), TRUE, FALSE)) %>%
+  ## then create a condition when both dates are present -- grab the latest one
+  mutate(date_coalesced = case_when(
+    date_both == TRUE & Date_finkle_parsed > date_filed_std ~ Date_finkle_parsed,
+    date_both == TRUE & date_filed_std > Date_finkle_parsed ~ date_filed_std,
+    date_both == TRUE & date_filed_std == Date_finkle_parsed ~ date_filed_std,
+    date_both == FALSE ~ date_coalesced_first)
+    ) %>%
+  mutate(judge_coalesced = behindbarstools::coalesce_with_warnings(judge_descr, Judge),
+         def_last_name_coalesced = behindbarstools::coalesce_with_warnings(defendant_last_name, def_last_name),
+         case_name_coalesced = behindbarstools::coalesce_with_warnings(`Case Name`, Case)) %>%
+  ## create `decision` based off of most recent case when diverging classification, and coalesced version otherwise
+  mutate(status = case_when(
+    status_mostrecent == TRUE ~ finkle_lower,
+    status_mostrecent == FALSE  ~ granted_denied,
+    is.na(status_mostrecent) ~ status_alldiff)) %>%
+  select(case_name_coalesced,
+         docketno_std,
+         date_coalesced,
+         court_std,
+         judge_coalesced,
+         status,
+         `Document Description`,
+         Title,
+         def_last_name_coalesced,
+         `Nature of Suit`,
+         `Prosecutor Name`,
+         ucla_citation = Citation.x,
+         finkle_Cite = Citation.y,
+         URL,
+         Link, ## coalesce this with "URL"? 
+         `Parallel Cite`
+         )
+
+head(dat_merged)
+
+#write_csv(dat, file.path(dat_path, "CR_data.csv"), na = "")
+
+# ## TO DO : grab status from whoever has the most recently updated document
+# ##### there are 168 of these situations
+# diff_status <- dat %>%
+#   filter(!is.na(finkle_lower) & !is.na(granted_denied) & (finkle_lower != granted_denied)) %>%
+#   mutate(more_recent = ifelse(Date_finkle_parsed > date_filed_std, "finkle", "ucla")) %>%
+#   select(docket_no_std, finkle_lower, granted_denied, date_filed_std, Date_finkle_parsed, more_recent)
+# nrow(diff_status)
+
+```
+
+Import the yearly criminal case by court data, merge with our data, format all the data together for mapping.
+
+Data source for total number of criminal cases sourced here: https://www.uscourts.gov/statistics/table/d-3/statistical-tables-federal-judiciary/2020/12/31 
+
+Map of federal courts here: https://hifld-geoplatform.opendata.arcgis.com/datasets/us-district-court-jurisdictions 
+
+First, prep the data by merging all three sources: 
+
+```{r}
+## read in federal court crosswalk
+court_xwalk <- read_csv(file.path("~", "UCLA", "misc-data", "federal courts", "courts_mapping.csv"))
+
+## read in yearly criminal case data 
+crim_dat_path <- file.path(dat_path, "stfj_d3_1231.2020.xlsx")
+crim_dat <- read_xlsx(crim_dat_path, skip = 2)
+crim_dat_cln <- crim_dat %>%
+  select_if(~sum(!is.na(.)) > 0) %>% # rm 100% missing cols 
+  mutate(across(where(is.character), ~na_if(., "-"))) 
+names(crim_dat_cln) <- as_vector(ifelse(!is.na(crim_dat_cln[1, ]), 
+                                        crim_dat_cln[1, ], 
+                                        names(crim_dat_cln)))
+
+## read in geospatial data 
+## District of Columbia > anomaly
+map_dat <- sf::read_sf(file.path("~", "UCLA", "misc-data", "federal courts", "US_District_Court_Jurisdictions.json")) %>%
+  select(STATEFP, NAME, STATE, CHIEF_JUDG, NOMINATING, TERM_AS_CH, DISTRICT_N, geometry)
+split <- str_split_fixed(map_dat$NAME, "District of ", n = 2)
+dist <- split[,1]
+state <- split[,2]
+dist_trans <- ifelse(dist != "", 
+                     glue("{str_sub(dist, 1, 1)}.D."),
+                     "D.")
+map_dat_cln <- map_dat %>% 
+  mutate(court_standardized = ifelse(state == "District of Columbia", 
+                                 state,
+                                 glue("{dist_trans} {state}")),
+         court_standardized = ifelse(court_standardized == "D. Northern Marianas Islands",
+                                     "D. Northern Mariana Islands",
+                                     court_standardized),
+        court_standardized = ifelse(court_standardized == "D. US Virgin Islands",
+                           "D. Virgin Islands",
+                           court_standardized)
+  )
+         
+## prep yearly criminal case data for merging
+crim_dat_out <- crim_dat_cln %>%
+  filter(!is.na(`Circuit and District`)) %>%
+  left_join(court_xwalk, by = c("Circuit and District" = "Court statistics")) %>%
+  filter(!is.na(District)) %>% 
+  select(District, Total) %>% ## only keep totals for now 
+  rename(all_crim_cases = Total)
+
+## merge yearly crim case data by court with CR, geospatial 
+islands <- c("Hawaii", "Alaska", "US Virgin Islands", 
+             "Northern Marianas Islands", "Puerto Rico")
+
+dat <- dat_merged %>%
+  # tab_2 %>%
+  left_join(crim_dat_out, by = c("court_std" = "District")) %>%
+  left_join(map_dat_cln, by = c("court_std" = "court_standardized")) %>%
+  mutate(continental_us = ifelse(STATE %in% islands, FALSE, TRUE)) %>%
+  mutate(facet_group = ifelse(continental_us, "Continental US", STATE),
+         finkle_Cite = ifelse(str_detect(finkle_Cite, "(?i)slip copy"), NA, finkle_Cite)) %>%
+  rename(case_name = case_name_coalesced,
+       docket_number = docketno_std,
+       date = date_coalesced,
+       court_std = court_std,
+       judge = judge_coalesced,
+       granted_denied = status,
+       doc_description = `Document Description`,
+       doc_title = Title,
+       def_last_name = def_last_name_coalesced,
+       nature_of_suit = `Nature of Suit`,
+       prosecutor_name = `Prosecutor Name`,
+       published_cite = finkle_Cite,
+       courtlistener_url = URL,
+       westlaw_url = Link,
+       westlaw_cite = `Parallel Cite`,
+       state_fips = STATEFP,
+       state = STATE,
+       full_court_name = NAME,
+       chief_judge = CHIEF_JUDG,
+       term_as_ch = TERM_AS_CH,
+       nominating = NOMINATING,
+       district_n = DISTRICT_N)
+
+dat_out <- dat %>%
+  dplyr::select(case_name,
+         docket_number,
+         date,
+         court_std,
+         judge,
+         granted_denied,
+         doc_description,
+         doc_title,
+         def_last_name,
+         nature_of_suit,
+         prosecutor_name,
+         ucla_citation,
+         published_cite,
+         courtlistener_url,
+         westlaw_url,
+         westlaw_cite,
+         state_fips,
+         state,
+         full_court_name,
+         chief_judge,
+         nominating,
+         term_as_ch,
+         district_n)
+#write_csv(dat_out, file.path(dat_path, "CR_data.csv"), na = "")
+```
+
+
+## Summarize data
+
+The data spans from `r min(dat$date)` to `r max(dat$date)`. This data set includes `r nrow(dat)` distinct documents, and `r n_distinct(dat$docketno_std)` distinct cases. 
+
+```{r}
+skim(dat)
+# n_distinct(dat$`Docket Number`) 
+n_distinct(dat$docket_number)
+```
+## Add region indicator
+
+We use state region classifications from US Census Bureau Regions and Divisions by State: http://www.census.gov/geo/maps-data/maps/pdfs/reference/us_regdiv.pdf. Thanks https://github.com/cphalpert/ for making it into a CSV!
+
+```{r}
+regions <- read_csv("https://raw.githubusercontent.com/cphalpert/census-regions/master/us%20census%20bureau%20regions%20and%20divisions.csv")
+
+dat <- dat %>%
+  mutate(court_state = gsub('.*D. (.*)', '\\1', court_std)) %>%
+  left_join(regions, by = c("court_state" = "State"))
+```
+
+## Plots, analysis
+
+First, we calculate the percentage granted and denied. 
+
+```{r}
+tab_1 <- dat %>% 
+  mutate(document_count = nrow(dat)) %>%
+  group_by(granted_denied) %>%
+  summarise(
+            group_count = n(),
+            n_documents = first(document_count)) %>%
+  ungroup() %>%
+  mutate(ntl_percent = (group_count / n_documents) * 100)
+
+tab_1 %>%
+  mutate(ntl_percent_rounded = round(ntl_percent, digits = 1)) %>% 
+  select(Status = granted_denied, 
+       Count = group_count,
+       Percentage = ntl_percent_rounded) %>%
+  paged_table()
+```
+
+How many documents do we have by court? 
+
+```{r, echo = FALSE}
+all_docs <- nrow(dat)
+group_counts <- dat %>%
+  group_by(court_std) %>%
+  summarise(n_documents_by_court = n()) %>%
+  ungroup() %>%
+  mutate(perc_total = (n_documents_by_court / all_docs) * 100) %>%
+  arrange(desc(n_documents_by_court)) 
+
+group_counts %>%
+  mutate(perc_total_rounded = round(perc_total, 2)) %>%
+  select(`Court Name` = court_std,
+         `Document Count` = n_documents_by_court,
+         `Percent of Total` = perc_total_rounded) %>%
+  paged_table()
+  
+# make a plot out of it!
+plt <- ggplot(group_counts, 
+       aes(y = n_documents_by_court, 
+           x = reorder(court_std, n_documents_by_court))) + 
+  geom_bar(position="dodge", stat="identity") +
+  coord_flip() + 
+  theme_minimal() + 
+  labs(x = "", y = "# Documents by Court") 
+# plt
+```
+
+We're interested in the percentage granted and denied broken down by court. 
+
+```{r}
+# rename tab 1 for merge-ability 
+tab_1_merging <- tab_1 %>%
+  select(granted_denied,
+         ntl_percent)
+
+tab_2 <- dat %>% 
+  group_by(granted_denied, court_std) %>%
+  summarise(group_count = n(),
+            Region = first(Region),
+            Division = first(Division)) %>%
+  ungroup() %>%
+  left_join(group_counts) %>%
+  mutate(court_percent = (group_count / n_documents_by_court) * 100) %>%
+  # merge in national granted/denied breakdown
+  left_join(tab_1_merging, by = "granted_denied") %>%
+  mutate(diff = ntl_percent - court_percent) %>%
+  arrange(desc(n_documents_by_court), desc(abs(diff)))
+
+tab_2 %>%
+  select(-c(court_percent, ntl_percent, diff)) %>%
+  pivot_wider(names_from = granted_denied,
+              values_from = group_count) %>%
+  mutate(pct_denied = (denied / n_documents_by_court) * 100,
+         pct_granted = (granted / n_documents_by_court) * 100,
+         pct_denied_rounded = round(pct_denied, 1),
+         pct_granted_rounded = round(pct_granted, 1),
+         grants = glue('{granted} ({pct_granted_rounded}%)'),
+         denials = glue('{denied} ({pct_denied_rounded}%)')) %>%
+  arrange(-n_documents_by_court) %>% 
+  select(`Court Name` = court_std,
+         `Document Count` = n_documents_by_court,
+         `Denied` = denials,
+         `Granted` = grants) %>%
+  paged_table()
+```
+
+Were there any courts with significantly more or less compassionate release cases granted than the national average? 
+
+```{r}
+ntl_pct_granted <- tab_1_merging %>% 
+  filter(granted_denied == "granted") %>%
+  pull(ntl_percent)
+
+# filter out courts that had less than 15 total CR documents
+court_specific_grants <- tab_2 %>%
+  filter(granted_denied == "granted",
+         n_documents_by_court > 14) %>%
+  ggplot(., 
+       aes(y = court_percent, 
+           x = reorder(court_std, diff),
+           color= Region,
+           fill = Region)) + 
+  geom_bar(position="dodge", stat="identity") +
+  geom_hline(yintercept = ntl_pct_granted, 
+             linetype="dotted", 
+                size=1.5) + 
+  labs(x = "", y = "% Granted",
+       subtitle = "Black dotted line shows national average % granted") + 
+  coord_flip() + 
+  theme_minimal()
+ggsave(file.path(plot_path, "court_specific_grants_region.png"), court_specific_grants, height = 10, width = 14)
+
+```
+
+It appears that most of the courts with lower than average grants were located in the south. Mapping it will be better for understanding. 
+
+Now that the data is ready, map it: 
+
+```{r}
+## map (# CR) / (total criminal cases)
+mapping_dat_out <- dat %>% 
+  group_by(granted_denied, court_std, .drop = FALSE) %>%
+  summarise(group_count = n(),
+            all_crim_cases = first(all_crim_cases)) %>% ## calc # granted, # denied
+  ungroup() %>%
+  left_join(group_counts, by = "court_std") %>% 
+  select(-perc_total) %>% 
+  pivot_wider(names_from = "granted_denied", values_from = "group_count") %>% 
+  mutate(perc_granted = granted / n_documents_by_court,
+         perc_denied = denied / n_documents_by_court,
+         perc_cr = n_documents_by_court / all_crim_cases) %>%
+  right_join(map_dat_cln, by = c("court_std" = "court_standardized")) 
+st_write(mapping_dat_out, file.path(dat_path, "court_mapping_data.shp"))
+
+
+map_1 <- dat %>%
+  group_by(court_std) %>%
+  filter(row_number() == 1) %>% 
+  ungroup() %>%
+  mutate(prop_cr = n_documents_by_court / all_crim_cases) 
+
+map_1 %>%
+  filter(continental_us == TRUE) %>%
+  mutate(prop_cr_cut = cut_interval(prop_cr, n = 6)) %>%
+  ggplot(data = ., 
+       aes(geometry = geometry)) + 
+  geom_sf(aes(fill = prop_cr_cut)) + 
+    scale_fill_discrete(
+    name = "Proportion of CR cases",
+    labels = c("0 - 14%", 
+               "14 - 28%", 
+               "28 - 42%",
+               "42 - 56%",
+               "56 - 70%",
+               "70 - 84%")
+  ) + 
+  # dont think this is changing anything, 
+  coord_sf(
+    xlim = c(-20000000, -3000000),
+    ylim = c(3000000, 11000000)
+  ) +
+  ggthemes::theme_map() #+ 
+  # facet_wrap(~facet_group)
+
+## map % granted 
+map_1 %>%
+  filter(continental_us == TRUE,
+         granted_denied == "granted") %>%
+  mutate(court_percent_cut = cut_interval(court_percent, n = 3)) %>%
+  ggplot(., 
+       aes(geometry = geometry)) + 
+  geom_sf(aes(fill = court_percent_cut)) + 
+  coord_sf(
+    xlim = c(-20000000, -5000000),
+    ylim = c(2000000, 12000000)
+  ) +
+  ggthemes::theme_map()
+
+```
+
+
+
+### Time series
+
+Did the number of compassionate release cases change over the course of the pandemic? 
+
+```{r}
+## all - weekly
+timebars_all_weekly <- dat %>%
+  group_by(week = week(date), year = year(date), granted_denied) %>% 
+  summarize(count = n()) %>%
+  ungroup() %>%
+  # mutate(week_date = as.Date(glue('{year}-{week}-1'), "%Y-%U-%u")) %>%
+  mutate(week_date = lubridate::ymd( glue("{year}-01-01" )) + lubridate::weeks(week - 1 )) %>%
+  ggplot(., aes(x = week_date, y = count, color = granted_denied, fill = granted_denied)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "", y = "Count", title = "COVID-19 Compassionate Release Cases")
+ggsave(file.path(plot_path, "timeseries_all_weekly.png"), timebars_all_weekly, height = 10, width = 14)
+
+## all - montly
+timebars_all_montly <- dat %>%
+  group_by(month = month(date), year = year(date), granted_denied) %>% 
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(month_date = lubridate::ymd( glue("{year}-{month}-01" ))) %>%
+  ggplot(., aes(x = month_date, y = count, color = granted_denied, fill = granted_denied)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "", y = "Count", title = "COVID-19 Compassionate Release Cases")
+ggsave(file.path(plot_path, "timeseries_all_monthly.png"), timebars_all_montly, height = 10, width = 14)
+
+## denials - weekly
+timebars_denial_weekly <- dat %>%
+  filter(granted_denied == "denied") %>%
+  group_by(week = week(date), year = year(date), granted_denied) %>% 
+  summarize(count = n()) %>%
+  ungroup() %>%
+  # mutate(week_date = as.Date(glue('{year}-{week}-1'), "%Y-%U-%u")) %>%
+  mutate(week_date = lubridate::ymd( glue("{year}-01-01" )) + lubridate::weeks(week - 1 )) %>%
+  ggplot(., aes(x = week_date, y = count)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "", y = "Count", title = "COVID-19 Compassionate Release Denials") + 
+  scale_fill_manual(values=c("#D7790F")) + 
+  theme_behindbars() + 
+  theme(legend.title = element_blank()) 
+ggsave(file.path(plot_path, "timeseries_denial_weekly.png"), timebars_denial_weekly, height = 10, width = 14)
+
+## denials - monthly
+timebars_denial_monthly <- dat %>%
+  filter(granted_denied == "denied") %>%
+  group_by(month = month(date), year = year(date), granted_denied) %>% 
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(month_date = lubridate::ymd( glue("{year}-{month}-01" ))) %>%
+  ggplot(., aes(x = month_date, y = count)) +
+  geom_bar(stat = "identity", fill = "#D7790F") + 
+  labs(x = "", y = "Count", title = "COVID-19 Compassionate Release Denials") + 
+  geom_text(aes(label = count), vjust = -0.2) + 
+  theme_behindbars() + 
+  theme(legend.title = element_blank()) 
+ggsave(file.path(plot_path, "timeseries_denials_monthly.png"), timebars_denial_monthly, height = 10, width = 14)
+
+## granted - weekly 
+timebars_grants_weekly <- dat %>%
+  filter(granted_denied == "granted") %>%
+  group_by(week = week(date), year = year(date), granted_denied) %>% 
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(week_date = lubridate::ymd( glue("{year}-01-01" )) + lubridate::weeks(week - 1 )) %>%
+  ggplot(., aes(x = week_date, y = count)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "", y = "Count", title = "COVID-19 Compassionate Release Grants")
+ggsave(file.path(plot_path, "timeseries_grants_weekly.png"), timebars_grants_weekly, height = 10, width = 14)
+
+## granted - monthly 
+## come back right here
+timebars_grants_monthly <- dat %>%
+  filter(granted_denied == "granted") %>%
+  group_by(month = month(date), year = year(date), granted_denied) %>% 
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(month_date = lubridate::ymd( glue("{year}-{month}-01" ))) %>%
+  ggplot(., aes(x = month_date, y = count)) +
+  geom_bar(stat = "identity", fill = "#4C6788") + 
+  labs(x = "", y = "Count", title = "COVID-19 Compassionate Release Grants") + 
+  geom_text(aes(label = count), vjust = -0.2) + 
+  theme_behindbars() 
+ggsave(file.path(plot_path, "timeseries_grants_monthly.png"), timebars_grants_monthly, height = 10, width = 14)
+
+## prop granted, prop denied
+n_grants <- dat %>% filter(granted_denied == "granted") %>% count() %>% pull(n)
+n_denials <- dat %>% filter(granted_denied == "denied") %>% count() %>% pull(n)
+timebars_prop_monthly <- dat %>%
+  group_by(month = month(date), year = year(date), granted_denied) %>% 
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(prop = ifelse(granted_denied == "granted", (count / n_grants), (count / n_denials)),
+    month_date = lubridate::ymd( glue("{year}-{month}-01" ))) %>%
+  ggplot(., aes(x = month_date, y = prop, fill = granted_denied, color = granted_denied)) +
+  geom_bar(position="dodge", stat="identity") + 
+  labs(x = "", 
+       y = "Status proportion (montly count / total number granted or denied) ", 
+       title = "COVID-19 Compassionate Releases") 
+
+# dat %>%
+#   group_by(month = month(date), year = year(date), granted_denied) %>% 
+#   summarize(count = n()) %>%
+#   ungroup() %>%
+#   mutate(prop = ifelse(granted_denied == "granted", (count / n_grants), (count / n_denials)),
+#     month_date = lubridate::ymd( glue("{year}-{month}-01" ))) %>% 
+#   ggplot(data = ., aes(month_date, prop, group = granted_denied)) +
+#     geom_col(aes(fill = granted_denied), position = "dodge") +
+#   ## cant get geom text right i quit!!
+#     geom_text(
+#       aes(label = count, 
+#           y = prop + 0.0005),
+#           position = position_dodge(1.8)) + 
+#     labs(x = "", 
+#        y = "Status proportion (montly count / total number granted or denied) ", 
+#        title = "COVID-19 Compassionate Releases") + 
+#   scale_y_continuous(labels = scales::percent)
+ggsave(file.path(plot_path, "timeseries_prop_monthly.png"), timebars_prop_monthly, height = 10, width = 14)
+
+
+## prop granted by month
+monthly_count <- dat %>%
+  group_by(month = month(date), year = year(date)) %>% 
+  summarize(monthly_count = n()) %>%
+  ungroup()
+
+timebars_prop_by_month <- dat %>%
+  group_by(month = month(date), year = year(date), granted_denied) %>% 
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(granted_denied_labeller = glue('% {str_to_title(granted_denied)}')) %>%
+  left_join(monthly_count) %>% 
+  mutate(prop = count / monthly_count,
+    month_date = lubridate::ymd( glue("{year}-{month}-01" ))) %>%
+  ggplot(., aes(x = month_date, y = prop, fill = granted_denied)) +
+  geom_bar(position="dodge", stat="identity", aes(fill = granted_denied)) + 
+  labs(x = "", y = "Monthly % granted or denied", title = "COVID-19 Compassionate Releases")  + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) + 
+  scale_fill_manual(values=c("#D7790F", "#4C6788"), labels = c("% Denied", "% Granted")) + 
+  theme_behindbars() + 
+  theme(legend.title = element_blank()) 
+ggsave(file.path(plot_path, "timeseries_prop_bymonth.png"), timebars_prop_by_month, height = 10, width = 14)
+
+```
+
