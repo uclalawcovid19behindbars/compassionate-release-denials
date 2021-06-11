@@ -29,7 +29,7 @@ plot_path <- here("compassionate-release-denials", "plots")
 Read in the most up-to-date data that Rebecca and volunteers have cleaned:
 
 ```{r, warning=FALSE, message=FALSE}
-ucla_dat <- read_xlsx(file.path(dat_path, "2020-04-08-master.xlsx")) %>%
+ucla_dat <- read_csv(file.path(dat_path, "2021-06-11-master.csv")) %>%
   mutate(merging_ucla = glue('{docketno_std}_{court_std}')) %>%
   select_if(~sum(!is.na(.)) > 0) %>% # rm all NA
   mutate(date_filed_std = as.Date(date_filed_std),
@@ -48,7 +48,8 @@ finkle_data <- read_xlsx(file.path(dat_path, "2020-02-16-cr_finkle.xlsx")) %>%
   mutate(Date_finkle = ifelse(!is.na(Date), glue('{substr(Date, 5, 7)} {substr(Date, 9, 10)} {substr(Date, 25, 28)}'), NA)) %>%
   mutate(Date_finkle_parsed = mdy(Date_finkle))
 
-merged <- full_join(ucla_dat, finkle_data, by = c("merging_ucla" = "merging_finkle"))
+merged <- full_join(ucla_dat, finkle_data, by = c("merging_ucla" = "merging_finkle",
+                                                  "def_last_name" = "defendant_last_name"))
 ```
 
 ```{r, warning=FALSE, message=FALSE}
@@ -73,7 +74,7 @@ dat_merged <- merged %>%
     date_both == FALSE ~ date_coalesced_first)
     ) %>%
   mutate(judge_coalesced = behindbarstools::coalesce_with_warnings(judge_descr, Judge),
-         def_last_name_coalesced = behindbarstools::coalesce_with_warnings(defendant_last_name, def_last_name),
+         # def_last_name_coalesced = behindbarstools::coalesce_with_warnings(defendant_last_name, def_last_name),
          case_name_coalesced = behindbarstools::coalesce_with_warnings(`Case Name`, Case)) %>%
   ## create `decision` based off of most recent case when diverging classification, and coalesced version otherwise
   mutate(status = case_when(
@@ -88,7 +89,7 @@ dat_merged <- merged %>%
          status,
          `Document Description`,
          Title,
-         def_last_name_coalesced,
+         def_last_name,
          `Nature of Suit`,
          `Prosecutor Name`,
          ucla_citation = Citation.x,
@@ -99,8 +100,6 @@ dat_merged <- merged %>%
          )
 
 head(dat_merged)
-
-#write_csv(dat, file.path(dat_path, "CR_data.csv"), na = "")
 
 # ## TO DO : grab status from whoever has the most recently updated document
 # ##### there are 168 of these situations
@@ -184,7 +183,7 @@ dat <- dat_merged %>%
        granted_denied = status,
        doc_description = `Document Description`,
        doc_title = Title,
-       def_last_name = def_last_name_coalesced,
+       def_last_name = def_last_name,
        nature_of_suit = `Nature of Suit`,
        prosecutor_name = `Prosecutor Name`,
        published_cite = finkle_Cite,
