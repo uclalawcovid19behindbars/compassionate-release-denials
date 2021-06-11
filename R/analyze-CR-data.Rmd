@@ -30,6 +30,8 @@ Read in the most up-to-date data that Rebecca and volunteers have cleaned:
 
 ```{r, warning=FALSE, message=FALSE}
 ucla_dat <- read_csv(file.path(dat_path, "2021-06-11-master.csv")) %>%
+  ## filter out duplicates marked by Rebecca
+  filter(is.na(`4-8 dupes`)) %>%
   mutate(merging_ucla = glue('{docketno_std}_{court_std}')) %>%
   select_if(~sum(!is.na(.)) > 0) %>% # rm all NA
   mutate(date_filed_std = as.Date(date_filed_std),
