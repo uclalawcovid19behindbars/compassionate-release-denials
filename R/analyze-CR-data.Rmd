@@ -80,7 +80,7 @@ dat_merged <- merged %>%
     status_mostrecent == TRUE ~ finkle_lower,
     status_mostrecent == FALSE  ~ granted_denied,
     is.na(status_mostrecent) ~ status_alldiff)) %>%
-  select(case_name_coalesced,
+  dplyr::select(case_name_coalesced,
          docketno_std,
          date_coalesced,
          court_std,
@@ -137,7 +137,7 @@ names(crim_dat_cln) <- as_vector(ifelse(!is.na(crim_dat_cln[1, ]),
 ## read in geospatial data 
 ## District of Columbia > anomaly
 map_dat <- sf::read_sf(file.path("~", "UCLA", "misc-data", "federal courts", "US_District_Court_Jurisdictions.json")) %>%
-  select(STATEFP, NAME, STATE, CHIEF_JUDG, NOMINATING, TERM_AS_CH, DISTRICT_N, geometry)
+  dplyr::select(STATEFP, NAME, STATE, CHIEF_JUDG, NOMINATING, TERM_AS_CH, DISTRICT_N, geometry)
 split <- str_split_fixed(map_dat$NAME, "District of ", n = 2)
 dist <- split[,1]
 state <- split[,2]
@@ -161,7 +161,7 @@ crim_dat_out <- crim_dat_cln %>%
   filter(!is.na(`Circuit and District`)) %>%
   left_join(court_xwalk, by = c("Circuit and District" = "Court statistics")) %>%
   filter(!is.na(District)) %>% 
-  select(District, Total) %>% ## only keep totals for now 
+  dplyr::select(District, Total) %>% ## only keep totals for now 
   rename(all_crim_cases = Total)
 
 ## merge yearly crim case data by court with CR, geospatial 
@@ -175,6 +175,7 @@ dat <- dat_merged %>%
   mutate(continental_us = ifelse(STATE %in% islands, FALSE, TRUE)) %>%
   mutate(facet_group = ifelse(continental_us, "Continental US", STATE),
          finkle_Cite = ifelse(str_detect(finkle_Cite, "(?i)slip copy"), NA, finkle_Cite)) %>%
+  mutate(district_name_ussc = str_remove(NAME, "District of ")) %>%
   rename(case_name = case_name_coalesced,
        docket_number = docketno_std,
        date = date_coalesced,
@@ -196,7 +197,8 @@ dat <- dat_merged %>%
        chief_judge = CHIEF_JUDG,
        term_as_ch = TERM_AS_CH,
        nominating = NOMINATING,
-       district_n = DISTRICT_N)
+       district_n = DISTRICT_N,
+       district_name_ussc = district_name_ussc)
 
 dat_out <- dat %>%
   dplyr::select(case_name,
@@ -244,7 +246,7 @@ regions <- read_csv("https://raw.githubusercontent.com/cphalpert/census-regions/
 
 dat <- dat %>%
   mutate(court_state = gsub('.*D. (.*)', '\\1', court_std)) %>%
-  left_join(regions, by = c("court_state" = "State"))
+  left_join(regions, by = c("court_state" = "State")) 
 ```
 
 ## Plots, analysis
@@ -263,7 +265,7 @@ tab_1 <- dat %>%
 
 tab_1 %>%
   mutate(ntl_percent_rounded = round(ntl_percent, digits = 1)) %>% 
-  select(Status = granted_denied, 
+  dplyr::select(Status = granted_denied, 
        Count = group_count,
        Percentage = ntl_percent_rounded) %>%
   paged_table()
@@ -282,7 +284,7 @@ group_counts <- dat %>%
 
 group_counts %>%
   mutate(perc_total_rounded = round(perc_total, 2)) %>%
-  select(`Court Name` = court_std,
+  dplyr::select(`Court Name` = court_std,
          `Document Count` = n_documents_by_court,
          `Percent of Total` = perc_total_rounded) %>%
   paged_table()
@@ -303,7 +305,7 @@ We're interested in the percentage granted and denied broken down by court.
 ```{r}
 # rename tab 1 for merge-ability 
 tab_1_merging <- tab_1 %>%
-  select(granted_denied,
+  dplyr::select(granted_denied,
          ntl_percent)
 
 tab_2 <- dat %>% 
@@ -320,7 +322,7 @@ tab_2 <- dat %>%
   arrange(desc(n_documents_by_court), desc(abs(diff)))
 
 tab_2 %>%
-  select(-c(court_percent, ntl_percent, diff)) %>%
+  dplyr::select(-c(court_percent, ntl_percent, diff)) %>%
   pivot_wider(names_from = granted_denied,
               values_from = group_count) %>%
   mutate(pct_denied = (denied / n_documents_by_court) * 100,
@@ -330,7 +332,7 @@ tab_2 %>%
          grants = glue('{granted} ({pct_granted_rounded}%)'),
          denials = glue('{denied} ({pct_denied_rounded}%)')) %>%
   arrange(-n_documents_by_court) %>% 
-  select(`Court Name` = court_std,
+  dplyr::select(`Court Name` = court_std,
          `Document Count` = n_documents_by_court,
          `Denied` = denials,
          `Granted` = grants) %>%
@@ -371,64 +373,86 @@ Now that the data is ready, map it:
 
 ```{r}
 ## map (# CR) / (total criminal cases)
+small_name_xwalk <- dat %>%
+  dplyr::select(court_std, district_name_ussc) %>%
+  unique()
+
 mapping_dat_out <- dat %>% 
-  group_by(granted_denied, court_std, .drop = FALSE) %>%
+  group_by(granted_denied, court_std,.drop = FALSE) %>%
   summarise(group_count = n(),
             all_crim_cases = first(all_crim_cases)) %>% ## calc # granted, # denied
   ungroup() %>%
   left_join(group_counts, by = "court_std") %>% 
-  select(-perc_total) %>% 
+  dplyr::select(-perc_total) %>% 
   pivot_wider(names_from = "granted_denied", values_from = "group_count") %>% 
   mutate(perc_granted = granted / n_documents_by_court,
          perc_denied = denied / n_documents_by_court,
          perc_cr = n_documents_by_court / all_crim_cases) %>%
-  right_join(map_dat_cln, by = c("court_std" = "court_standardized")) 
-st_write(mapping_dat_out, file.path(dat_path, "court_mapping_data.shp"))
+  right_join(map_dat_cln, by = c("court_std" = "court_standardized")) %>%
+  left_join(small_name_xwalk, by = "court_std") %>%
+  left_join(ussc, by = c("district_name_ussc" = "district")) %>%
+  mutate(diff_ussc = n_documents_by_court - ussc_total,
+         diff_granted = granted - ussc_n_granted,
+         diff_denied = denied - ussc_n_denied,
+         perc_denied_ussc = ussc_n_denied / ussc_total)
+st_write(mapping_dat_out, file.path(dat_path, "court_mapping_data.shp"),
+         append = FALSE)
 
+## decided to map it in QGIS 
+# map_1 <- dat %>%
+#   group_by(court_std) %>%
+#   filter(row_number() == 1) %>% 
+#   ungroup() %>%
+#   mutate(prop_cr = n_documents_by_court / all_crim_cases) 
+# 
+# map_1 %>%
+#   filter(continental_us == TRUE) %>%
+#   mutate(prop_cr_cut = cut_interval(prop_cr, n = 6)) %>%
+#   ggplot(data = ., 
+#        aes(geometry = geometry)) + 
+#   geom_sf(aes(fill = prop_cr_cut)) + 
+#     scale_fill_discrete(
+#     name = "Proportion of CR cases",
+#     labels = c("0 - 14%", 
+#                "14 - 28%", 
+#                "28 - 42%",
+#                "42 - 56%",
+#                "56 - 70%",
+#                "70 - 84%")
+#   ) + 
+#   # dont think this is changing anything, 
+#   coord_sf(
+#     xlim = c(-20000000, -3000000),
+#     ylim = c(3000000, 11000000)
+#   ) +
+#   ggthemes::theme_map() #+ 
+#   # facet_wrap(~facet_group)
+# 
+# ## map % granted 
+# map_1 %>%
+#   filter(continental_us == TRUE,
+#          granted_denied == "granted") %>%
+#   mutate(court_percent_cut = cut_interval(court_percent, n = 3)) %>%
+#   ggplot(., 
+#        aes(geometry = geometry)) + 
+#   geom_sf(aes(fill = court_percent_cut)) + 
+#   coord_sf(
+#     xlim = c(-20000000, -5000000),
+#     ylim = c(2000000, 12000000)
+#   ) +
+#   ggthemes::theme_map()
 
-map_1 <- dat %>%
-  group_by(court_std) %>%
-  filter(row_number() == 1) %>% 
-  ungroup() %>%
-  mutate(prop_cr = n_documents_by_court / all_crim_cases) 
+```
+## Comparison to U.S. Sentencing Commission data
 
-map_1 %>%
-  filter(continental_us == TRUE) %>%
-  mutate(prop_cr_cut = cut_interval(prop_cr, n = 6)) %>%
-  ggplot(data = ., 
-       aes(geometry = geometry)) + 
-  geom_sf(aes(fill = prop_cr_cut)) + 
-    scale_fill_discrete(
-    name = "Proportion of CR cases",
-    labels = c("0 - 14%", 
-               "14 - 28%", 
-               "28 - 42%",
-               "42 - 56%",
-               "56 - 70%",
-               "70 - 84%")
-  ) + 
-  # dont think this is changing anything, 
-  coord_sf(
-    xlim = c(-20000000, -3000000),
-    ylim = c(3000000, 11000000)
-  ) +
-  ggthemes::theme_map() #+ 
-  # facet_wrap(~facet_group)
+Source: <https://www.ussc.gov/sites/default/files/pdf/research-and-publications/federal-sentencing-statistics/compassionate-release/20210609-Compassionate-Release.pdf>, data extracted from table 1. 
 
-## map % granted 
-map_1 %>%
-  filter(continental_us == TRUE,
-         granted_denied == "granted") %>%
-  mutate(court_percent_cut = cut_interval(court_percent, n = 3)) %>%
-  ggplot(., 
-       aes(geometry = geometry)) + 
-  geom_sf(aes(fill = court_percent_cut)) + 
-  coord_sf(
-    xlim = c(-20000000, -5000000),
-    ylim = c(2000000, 12000000)
-  ) +
-  ggthemes::theme_map()
-
+```{r}
+ussc <- read_csv(file.path(dat_path, "ussc_cr.csv")) %>%
+  dplyr::select(district = district,
+         ussc_total = total,
+         ussc_n_granted = n_granted,
+         ussc_n_denied = n_denied)
 ```
 
 
@@ -576,6 +600,4 @@ timebars_prop_by_month <- dat %>%
   theme_behindbars() + 
   theme(legend.title = element_blank()) 
 ggsave(file.path(plot_path, "timeseries_prop_bymonth.png"), timebars_prop_by_month, height = 10, width = 14)
-
 ```
-
