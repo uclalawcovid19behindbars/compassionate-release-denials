@@ -602,3 +602,54 @@ timebars_prop_by_month <- dat %>%
   theme(legend.title = element_blank()) 
 ggsave(file.path(plot_path, "timeseries_prop_bymonth.png"), timebars_prop_by_month, height = 10, width = 14)
 ```
+
+
+## Grants/Denials by Judge
+
+First, we calculate the percentage granted and denied. 
+
+```{r}
+judge_tab <- dat %>% 
+  group_by(court_std, judge) %>%
+  summarise(
+            n_cases_by_judge = n()) %>%
+  ungroup() %>%
+  arrange(desc(n_cases_by_judge))
+
+group_counts ## earlier calculated counts by court
+
+denials_by_court <- dat %>%
+  group_by(court_std, granted_denied, .drop = FALSE) %>%
+  summarise(n_cases_by_court_status = n()) %>%
+  filter(granted_denied == "denied") %>%
+  left_join(group_counts, by = "court_std") %>%
+  mutate(court_deny_rate = n_cases_by_court_status / n_documents_by_court) %>%
+  dplyr::select(court_std, n_documents_by_court, court_deny_rate)
+
+denials_by_judge <- dat %>%
+  group_by(court_std, judge, granted_denied, .drop = FALSE) %>%
+  summarise(n_cases_by_judge_status = n()) %>%
+  left_join(judge_tab, by = c("court_std", "judge")) %>%
+  mutate(judge_deny_rate = n_cases_by_judge_status / n_cases_by_judge) %>%
+  filter(granted_denied == "denied") %>%
+  arrange(desc(n_cases_by_judge)) %>%
+  left_join(denials_by_court, by = "court_std") %>%
+  mutate(diff_judge_court = court_deny_rate - judge_deny_rate) 
+
+## quick plot
+judge_plt <- denials_by_judge %>%
+  filter(n_documents_by_court > 100) %>%
+  ggplot(., 
+       aes( x = judge, y = diff_judge_court ) ) + 
+      geom_bar( stat = "identity", width = 3, color = "black") + 
+      facet_wrap( ~ court_std ) + 
+      labs(x = "Judge" ) +
+  theme_bw() + 
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  geom_hline(yintercept=0)
+ggsave(file.path(plot_path, "judge_court_comparison.png"), judge_plt, height = 10, width = 14)
+
+```
+
