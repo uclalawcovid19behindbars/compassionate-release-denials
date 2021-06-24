@@ -17,11 +17,12 @@ library(behindbarstools)
 library(rmarkdown)
 library(glue)
 library(lubridate)
+library(sf)
 
 knitr::opts_chunk$set(fig.height=13) 
 knitr::opts_chunk$set(message = FALSE)
-dat_path <- here("compassionate-release-denials", "data")
-plot_path <- here("compassionate-release-denials", "plots")
+dat_path <- here("data")
+plot_path <- here("plots")
 ```
 
 ## Read clean data 
@@ -370,7 +371,17 @@ ggsave(file.path(plot_path, "court_specific_grants_region.png"), court_specific_
 
 It appears that most of the courts with lower than average grants were located in the south. Mapping it will be better for understanding. 
 
-Now that the data is ready, map it: 
+At this point, we also want to create a comparison to the U.S. Sentencing Commission data. Source: <https://www.ussc.gov/sites/default/files/pdf/research-and-publications/federal-sentencing-statistics/compassionate-release/20210609-Compassionate-Release.pdf>, data extracted from table 1. 
+
+```{r}
+ussc <- read_csv(file.path(dat_path, "ussc_cr.csv")) %>%
+  dplyr::select(district = district,
+         ussc_total = total,
+         ussc_n_granted = n_granted,
+         ussc_n_denied = n_denied)
+```
+
+Map the merged data: 
 
 ```{r}
 ## map (# CR) / (total criminal cases)
@@ -398,6 +409,20 @@ mapping_dat_out <- dat %>%
          perc_denied_ussc = ussc_n_denied / ussc_total)
 st_write(mapping_dat_out, file.path(dat_path, "court_mapping_data.shp"),
          append = FALSE)
+
+## write out a file that compares the USSC data to the UCLA data: 
+ussc_ucla_comparison <- mapping_dat_out %>% 
+  rename(ucla_total = n_documents_by_court,
+         ucla_n_granted = granted,
+         ucla_n_denied = denied,
+         diff_total = diff_ussc
+         ) %>%
+  dplyr::select(court_std, 
+                all_crim_cases, 
+                ends_with("total"),
+                ends_with("granted"),
+                ends_with("denied"))
+write_csv(ussc_ucla_comparison, file.path(dat_path, "ussc_comparison.csv"))
 
 ## decided to map it in QGIS 
 # map_1 <- dat %>%
@@ -444,18 +469,6 @@ st_write(mapping_dat_out, file.path(dat_path, "court_mapping_data.shp"),
 #   ggthemes::theme_map()
 
 ```
-## Comparison to U.S. Sentencing Commission data
-
-Source: <https://www.ussc.gov/sites/default/files/pdf/research-and-publications/federal-sentencing-statistics/compassionate-release/20210609-Compassionate-Release.pdf>, data extracted from table 1. 
-
-```{r}
-ussc <- read_csv(file.path(dat_path, "ussc_cr.csv")) %>%
-  dplyr::select(district = district,
-         ussc_total = total,
-         ussc_n_granted = n_granted,
-         ussc_n_denied = n_denied)
-```
-
 
 
 ### Time series

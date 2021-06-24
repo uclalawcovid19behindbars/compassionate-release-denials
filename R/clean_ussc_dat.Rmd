@@ -19,7 +19,8 @@ We're using data from the U.S. Sentencing Commission to look at federal compassi
 
 Extract the first table from page 4:
 
-```{r}
+```{r, eval=FALSE}
+## only run this once!
 raw_src <- "https://www.ussc.gov/sites/default/files/pdf/research-and-publications/federal-sentencing-statistics/compassionate-release/20210609-Compassionate-Release.pdf"
   
 tab_1_first_col <- raw_src %>%
@@ -49,4 +50,8 @@ tab_1 <- tab_1_cleaning %>%
          district != "TOTAL")
 
 #write_csv(tab_1, file.path(here(), "compassionate-release-denials", "data", "ussc_cr.csv"))
+```
+
+```{r}
+tab_1 <- read_csv(file.path(here(), "data", "ussc_cr.csv"))
 ```
