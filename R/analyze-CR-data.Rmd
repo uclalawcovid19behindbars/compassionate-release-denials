@@ -56,7 +56,7 @@ merged <- full_join(ucla_dat, finkle_data, by = c("merging_ucla" = "merging_fink
 ```
 
 ```{r, warning=FALSE, message=FALSE}
-dat_merged <- merged %>% 
+dat_merged_all_vars <- merged %>% 
   mutate(finkle_lower = tolower(Decision)) %>%
   mutate(court_std = behindbarstools::coalesce_with_warnings(court_std.x, court_std.y)) %>% 
   mutate(docketno_std = behindbarstools::coalesce_with_warnings(docketno_std.x, docketno_std.y)) %>% 
@@ -80,10 +80,33 @@ dat_merged <- merged %>%
          # def_last_name_coalesced = behindbarstools::coalesce_with_warnings(defendant_last_name, def_last_name),
          case_name_coalesced = behindbarstools::coalesce_with_warnings(`Case Name`, Case)) %>%
   ## create `decision` based off of most recent case when diverging classification, and coalesced version otherwise
+  ## TO DO: incorporate review_granted_denied in here 
   mutate(status = case_when(
     status_mostrecent == TRUE ~ finkle_lower,
     status_mostrecent == FALSE  ~ granted_denied,
-    is.na(status_mostrecent) ~ status_alldiff)) %>%
+    is.na(status_mostrecent) ~ status_alldiff)) 
+
+## data without def full name
+dat_merged_some_vars <- dat_merged_all_vars %>%
+  dplyr::select(case_name_coalesced,
+         docketno_std,
+         date_coalesced,
+         court_std,
+         judge_coalesced,
+         status,
+         `Document Description`,
+         Title,
+         def_last_name,
+         `Nature of Suit`,
+         `Prosecutor Name`,
+         ucla_citation = Citation.x,
+         finkle_Cite = Citation.y,
+         URL,
+         Link, ## coalesce this with "URL"? 
+         `Parallel Cite`
+         )
+
+dat_merged <- dat_merged_all_vars %>%
   dplyr::select(case_name_coalesced,
          docketno_std,
          date_coalesced,
@@ -104,14 +127,39 @@ dat_merged <- merged %>%
 
 head(dat_merged)
 
-# ## TO DO : grab status from whoever has the most recently updated document
-# ##### there are 168 of these situations
+### STEP TAKEN: grab status from whoever has the most recently updated document
+###### there are 168 of these situations
 # diff_status <- dat %>%
 #   filter(!is.na(finkle_lower) & !is.na(granted_denied) & (finkle_lower != granted_denied)) %>%
 #   mutate(more_recent = ifelse(Date_finkle_parsed > date_filed_std, "finkle", "ucla")) %>%
 #   select(docket_no_std, finkle_lower, granted_denied, date_filed_std, Date_finkle_parsed, more_recent)
 # nrow(diff_status)
+```
 
+```{r, include = FALSE}
+## 7/7/21: write out data with defendant full name (for BOP lookup only)
+## here, renamed status "granted_denied" 
+dat_merged_full_name <- dat_merged_all_vars %>%
+  dplyr::select(case_name_coalesced,
+         docketno_std,
+         date_coalesced,
+         court_std,
+         judge_coalesced,
+         status,
+         `Document Description`,
+         Title,
+         defendant_names,
+         def_last_name,
+         `Nature of Suit`,
+         `Prosecutor Name`,
+         ucla_citation = Citation.x,
+         finkle_Cite = Citation.y,
+         URL,
+         Link, ## coalesce this with "URL"? 
+         `Parallel Cite`
+         ) %>%
+  dplyr::rename(granted_denied = status) 
+write_csv(dat_merged_full_name, file.path(dat_path, "2021-06-11-master_cln.csv"))
 ```
 
 Import the yearly criminal case by court data, merge with our data, format all the data together for mapping.
@@ -406,7 +454,9 @@ mapping_dat_out <- dat %>%
   mutate(diff_ussc = n_documents_by_court - ussc_total,
          diff_granted = granted - ussc_n_granted,
          diff_denied = denied - ussc_n_denied,
-         perc_denied_ussc = ussc_n_denied / ussc_total)
+         perc_denied_ussc = ussc_n_denied / ussc_total,
+         perc_diff_denied = diff_denied / ussc_n_denied,
+         perc_diff_granted = diff_granted / ussc_n_granted)
 st_write(mapping_dat_out, file.path(dat_path, "court_mapping_data.shp"),
          append = FALSE)
 
@@ -422,6 +472,7 @@ ussc_ucla_comparison <- mapping_dat_out %>%
                 ends_with("total"),
                 ends_with("granted"),
                 ends_with("denied"))
+write_csv(ussc_ucla_comparison, file.path(dat_path, "ussc_comparison.csv"))
 write_csv(ussc_ucla_comparison, file.path(dat_path, "ussc_comparison.csv"))
 
 ## decided to map it in QGIS 
@@ -608,12 +659,43 @@ timebars_prop_by_month <- dat %>%
     month_date = lubridate::ymd( glue("{year}-{month}-01" ))) %>%
   ggplot(., aes(x = month_date, y = prop, fill = granted_denied)) +
   geom_bar(position="dodge", stat="identity", aes(fill = granted_denied)) + 
-  labs(x = "", y = "Monthly % granted or denied", title = "COVID-19 Compassionate Releases")  + 
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) + 
+  labs(x = "", y = "Percent granted or denied", title = "COVID-19 Compassionate Releases")  + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) + 
+  scale_fill_manual(values=c("#D7790F", "#4C6788"), labels = c("% Denied", "% Granted")) +
+  theme_behindbars() + 
+  theme(legend.title = element_blank(),
+        legend.position = "none") 
+ggsave(file.path(plot_path, "timeseries_prop_bymonth.png"), timebars_prop_by_month, height = 10, width = 14)
+ggsave(file.path(plot_path, "timeseries_prop_bymonth.svg"), timebars_prop_by_month, height = 10, width = 14)
+
+
+## prop granted/denied by week
+weekly_count <- dat %>%
+  group_by(week = week(date), year = year(date)) %>% 
+  summarize(weekly_count = n()) %>%
+  ungroup()
+
+timebars_prop_by_week <- dat %>%
+  group_by(week = week(date), year = year(date), granted_denied) %>% 
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(granted_denied_labeller = glue('% {str_to_title(granted_denied)}')) %>%
+  left_join(weekly_count) %>% 
+  mutate(prop = count / weekly_count,
+         week_date = lubridate::ymd( glue("{year}-01-01" )) + lubridate::weeks(week - 1 )) %>%
+  ggplot(., aes(x = week_date, y = prop, fill = granted_denied)) +
+  geom_bar(position="dodge", 
+           stat="identity", 
+           width = 4,
+           aes(fill = granted_denied)) + 
+  labs(x = "", y = "Weekly % granted or denied", title = "COVID-19 Compassionate Releases",
+       subtitle = "Denied and Granted")  + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) + 
   scale_fill_manual(values=c("#D7790F", "#4C6788"), labels = c("% Denied", "% Granted")) + 
   theme_behindbars() + 
-  theme(legend.title = element_blank()) 
-ggsave(file.path(plot_path, "timeseries_prop_bymonth.png"), timebars_prop_by_month, height = 10, width = 14)
+  theme(legend.title = element_blank(),
+        legend.position = "none") 
+ggsave(file.path(plot_path, "timeseries_prop_byweek.png"), timebars_prop_by_week, height = 10, width = 14)
 ```
 
 
@@ -631,23 +713,25 @@ judge_tab <- dat %>%
 
 group_counts ## earlier calculated counts by court
 
-denials_by_court <- dat %>%
+sel_decision <- "granted" ## type "granted" or "denied" here
+
+decision_by_court <- dat %>%
   group_by(court_std, granted_denied, .drop = FALSE) %>%
   summarise(n_cases_by_court_status = n()) %>%
-  filter(granted_denied == "denied") %>%
+  filter(granted_denied == sel_decision) %>%
   left_join(group_counts, by = "court_std") %>%
-  mutate(court_deny_rate = n_cases_by_court_status / n_documents_by_court) %>%
-  dplyr::select(court_std, n_documents_by_court, court_deny_rate)
+  mutate(court_decision_rate = n_cases_by_court_status / n_documents_by_court) %>%
+  dplyr::select(court_std, n_documents_by_court, court_decision_rate)
 
-denials_by_judge <- dat %>%
+decision_by_judge <- dat %>%
   group_by(court_std, judge, granted_denied, .drop = FALSE) %>%
   summarise(n_cases_by_judge_status = n()) %>%
   left_join(judge_tab, by = c("court_std", "judge")) %>%
-  mutate(judge_deny_rate = n_cases_by_judge_status / n_cases_by_judge) %>%
-  filter(granted_denied == "denied") %>%
+  mutate(judge_decision_rate = n_cases_by_judge_status / n_cases_by_judge) %>%
+  filter(granted_denied == sel_decision) %>%
   arrange(desc(n_cases_by_judge)) %>%
-  left_join(denials_by_court, by = "court_std") %>%
-  mutate(diff_judge_court = court_deny_rate - judge_deny_rate) 
+  left_join(decision_by_court, by = "court_std") %>%
+  mutate(diff_judge_court = court_decision_rate - judge_decision_rate) 
 
 ## quick plot
 judge_plt <- denials_by_judge %>%
